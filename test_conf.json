@@ -1,0 +1,27 @@
+{
+  "model_name": "debug",
+  "num_mels": 80,
+  "num_freq": 1025,
+  "sample_rate": 20000,
+  "frame_length_ms": 50,
+  "frame_shift_ms": 12.5,
+  "preemphasis": 0.97,
+  "min_level_db": -100,
+  "ref_level_db": 20,
+  "embedding_size": 256,
+
+  "epochs": 1000,
+  "lr": 0.002,
+  "warmup_steps": 4000,
+  "batch_size": 32,
+  "eval_batch_size":32,
+    
+  "num_loader_workers": 8,
+
+  "checkpoint": true,
+  "save_step": 376,
+  "data_path": "/data/shared/KeithIto/LJSpeech-1.0/",
+  "min_wav_len": 0, 
+  "max_wav_len": 50000,
+  "output_path": "/data/shared/erogol_models/"
+}
