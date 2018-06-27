@@ -18,50 +18,7 @@ from model import FFTNetModel
 from model import MaskedCrossEntropyLoss
 from dataset import LJSpeechDataset
 
-torch.manual_seed(1)
-use_cuda = torch.cuda.is_available()
 
-parser = argparse.ArgumentParser()
-parser.add_argument('--config_path', type=str,
-                    help='path to config file for training',)
-parser.add_argument('--debug', type=bool, default=False,
-                    help='do not ask for git has before run.')
-parser.add_argument('--finetine_path', type=str)
-args = parser.parse_args()
-c = load_config(args.config_path)
-
-# setup output paths and read configs
-_ = os.path.dirname(os.path.realpath(__file__))
-OUT_PATH = os.path.join(_, c.output_path)
-OUT_PATH = create_experiment_folder(OUT_PATH, c.model_name, True)
-CHECKPOINT_PATH = os.path.join(OUT_PATH, 'checkpoints')
-shutil.copyfile(args.config_path, os.path.join(OUT_PATH, 'config.json'))
-
-# setup tensorboard
-tb = SummaryWriter(OUT_PATH)
-
-model = FFTNetModel(hid_channels=256, out_channels=256, n_layers=c.num_quant, cond_channels=80)
-criterion = MaskedCrossEntropyLoss()
-# criterion = torch.nn.CrossEntropyLoss()
-optimizer = torch.optim.Adam(model.parameters(), lr=c.lr)
-num_params = count_parameters(model)
-print(" > Models has {} parameters".format(num_params))
-
-if use_cuda:
-    model.cuda()
-    criterion.cuda()
-    
-train_dataset = LJSpeechDataset(os.path.join(c.data_path, "meta_fftnet_overfit.csv"), 
-                          c.data_path, 
-                          c.sample_rate,
-                          c.num_mels, c.num_freq, 
-                          c.min_level_db, c.frame_shift_ms,
-                          c.frame_length_ms, c.preemphasis, c.ref_level_db,
-                          c.num_quant, c.min_wav_len, c.max_wav_len, False)
-
-train_loader = DataLoader(train_dataset, batch_size=c.batch_size,
-                        shuffle=False, collate_fn=train_dataset.collate_fn,
-                        drop_last=True, num_workers=4)
 def train(epoch):
     avg_loss = 0.0
     epoch_time = 0
@@ -97,7 +54,7 @@ def train(epoch):
                                           ])
         avg_loss += loss.item()
 
-        
+
 def evaluate():
     pass
 
@@ -107,6 +64,53 @@ def main(args):
         evaluate()
 
 if __name__ == "__main__":
+
+    torch.manual_seed(1)
+    use_cuda = torch.cuda.is_available()
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--config_path', type=str,
+                        help='path to config file for training',)
+    parser.add_argument('--debug', type=bool, default=False,
+                        help='do not ask for git has before run.')
+    parser.add_argument('--finetine_path', type=str)
+    args = parser.parse_args()
+    c = load_config(args.config_path)
+
+    # setup output paths and read configs
+    _ = os.path.dirname(os.path.realpath(__file__))
+    OUT_PATH = os.path.join(_, c.output_path)
+    OUT_PATH = create_experiment_folder(OUT_PATH, c.model_name, True)
+    CHECKPOINT_PATH = os.path.join(OUT_PATH, 'checkpoints')
+    shutil.copyfile(args.config_path, os.path.join(OUT_PATH, 'config.json'))
+
+    # setup tensorboard
+    tb = SummaryWriter(OUT_PATH)
+
+    model = FFTNetModel(hid_channels=256, out_channels=256, n_layers=c.num_quant,
+                        cond_channels=80)
+    criterion = MaskedCrossEntropyLoss()
+    # criterion = torch.nn.CrossEntropyLoss()
+    optimizer = torch.optim.Adam(model.parameters(), lr=c.lr)
+    num_params = count_parameters(model)
+    print(" > Models has {} parameters".format(num_params))
+
+    if use_cuda:
+        model.cuda()
+        criterion.cuda()
+
+    train_dataset = LJSpeechDataset(os.path.join(c.data_path, "mels",
+                                                 "meta_fftnet_overfit.csv"),
+                              os.path.join(c.data_path, "mels"),
+                              c.sample_rate,
+                              c.num_mels, c.num_freq,
+                              c.min_level_db, c.frame_shift_ms,
+                              c.frame_length_ms, c.preemphasis, c.ref_level_db,
+                              c.num_quant, c.min_wav_len, c.max_wav_len, False)
+
+    train_loader = DataLoader(train_dataset, batch_size=c.batch_size,
+                            shuffle=False, collate_fn=train_dataset.collate_fn,
+                            drop_last=True, num_workers=4)
     try:
         main(args)
         remove_experiment_folder(OUT_PATH)
