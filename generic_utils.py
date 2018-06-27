@@ -124,8 +124,8 @@ def check_update(model, grad_clip, grad_top):
         print(" | > Gradient is above the top limit !!")
         skip_flag = True
     return grad_norm, skip_flag
-    
-    
+
+
 def lr_decay(init_lr, global_step, warmup_steps):
     r'''from https://github.com/r9y9/tacotron_pytorch/blob/master/train.py'''
     warmup_steps = float(warmup_steps)
@@ -160,7 +160,8 @@ class Progbar(object):
         self.verbose = verbose
         self._dynamic_display = ((hasattr(sys.stdout, 'isatty') and
                                   sys.stdout.isatty()) or
-                                 'ipykernel' in sys.modules)
+                                  'ipykernel' in sys.modules or
+                                  os.name == 'nt')
 
     def update(self, current, values=None, force=False):
         """Updates the progress bar.
@@ -190,7 +191,7 @@ class Progbar(object):
 
             prev_total_width = self.total_width
             if self._dynamic_display:
-                sys.stdout.write('\b' * prev_total_width)
+                # sys.stdout.write('\b' * prev_total_width)
                 sys.stdout.write('\r')
             else:
                 sys.stdout.write('\n')
