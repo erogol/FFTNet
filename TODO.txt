@@ -1,0 +1,9 @@
+[ ] Add conf files for windows and linux and keep win version segregated
+[ ] Short to long scheduling
+[ ] Model averaging
+[x] Multi gpu training (test it on cluster)
+[x] Apply buffering for inference.
+[x] Overfit to a small part of the training set.
+[x] Clock the inference time with buffering
+  - ~0.003 sec per prediction on Dell XPS 15 GPU
+  - ~0.009 sec on Dell XPS 15 GPU

@@ -14,7 +14,7 @@
   "epochs": 1000,
   "lr": 0.001,
   "warmup_steps": 3000,
-  "batch_size": 4,
+  "batch_size": 1,
   "eval_batch_size":32,
 
   "num_loader_workers": 8,
