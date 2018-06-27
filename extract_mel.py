@@ -1,10 +1,10 @@
 import os
 import sys
-sys.path.append("/home/erogol/projects/")
 import time
 import glob
 import argparse
 import soundfile as sf
+import librosa
 import numpy as np
 import tqdm
 import pyworld as pw
@@ -22,6 +22,9 @@ parser.add_argument('--out_path', type=str,
 parser.add_argument('--config', type=str,
                     help='conf.json file for run settings.')
 args = parser.parse_args()
+
+args.out_path = os.path.join(*args.out_path.split('/'))
+args.data_path = os.path.join(*args.data_path.split('/'))
 
 DATA_PATH = args.data_path
 OUT_PATH = args.out_path
