@@ -2,16 +2,16 @@ import os
 import librosa
 import pickle
 import copy
-import soundfile as sf
+# import soundfile as sf
 import numpy as np
-import pyworld as pw
+# import pyworld as pw
 from scipy import signal
 
 _mel_basis = None
 
 
 class WorldProcessor(object):
-    
+
     def __init__(self, sample_rate, num_freq, num_mels, ref_level_db, min_level_db):
         self.sample_rate = sample_rate
         self.num_freq = num_freq
@@ -20,12 +20,12 @@ class WorldProcessor(object):
         self.ref_level_db = ref_level_db
         self.min_level_db = min_level_db
         self.power = 1.4
-    
+
     def load_wav(self, path):
         x, fs = librosa.load(path, dtype=np.float64)
         assert fs == self.sample_rate
         return x, fs
-    
+
     def world_encode(self, x, fs):
         r"""Encode voice signal with WORLD features.It returns normalized
         spectral envelope and F0, ready for training."""
@@ -36,7 +36,7 @@ class WorldProcessor(object):
         sp_hn = self.normalize_spectrogram(sp_h)
         f0_hn = self.normalize_f0(f0_h)
         return f0_hn, sp_hn, ap_h
-    
+
     def world_decode(self, f0_hn, sp_hn, ap_h):
         r"""Decode WORLD features to voice signal. It denormalizes spectral
         envelope and F0 before decoding"""
@@ -45,13 +45,13 @@ class WorldProcessor(object):
         sp_h = sp_h.astype(np.float64)
         y_h = pw.synthesize(f0_h, sp_h, ap_h, self.sample_rate, pw.default_frame_period)
         return y_h
-    
+
     def normalize_f0(self, f0):
         return f0 / 800.0
-    
+
     def denormalize_f0(self, f0):
         return f0 * 800.0
-    
+
     def normalize_spectrogram(self, sp):
         sp = sp.astype(np.float32)
         sp[sp==0] = 1e-5
@@ -59,22 +59,22 @@ class WorldProcessor(object):
         # sp -= self.ref_level_db
         sp = (sp - self.min_level_db) / -self.min_level_db
         return sp
-    
+
     def denormalize_spectrogram(self, sp):
         sp = sp.astype(np.float32)
         sp = (sp * -self.min_level_db) + self.min_level_db
         # sp += self.ref_level_db
-        sp = np.power(10.0, sp) 
+        sp = np.power(10.0, sp)
         return sp
-    
+
     def _build_mel_basis(self, ):
         return librosa.filters.mel(self.sample_rate, self.n_fft, n_mels=self.num_mels)
-    
+
     def melspectrogram(self, sp):
         msp = self._linear_to_mel(sp)
         msp = self.normalize_spectrogram(msp)
         return msp
-    
+
     def _linear_to_mel(self, spectrogram):
         _mel_basis = self._build_mel_basis()
         return np.dot(_mel_basis, spectrogram)
@@ -164,7 +164,7 @@ class AudioProcessor(object):
             if np.max(wav[x:x + window_length]) < threshold:
                 return x + hop_length
         return len(wav)
-    
+
     def mulaw_encode(self, wav, qc):
         mu = qc - 1
         wav_abs = np.minimum(np.abs(wav), 1.0)
@@ -173,7 +173,7 @@ class AudioProcessor(object):
         # Quantize signal to the specified number of levels.
         signal = (signal + 1) / 2 * mu + 0.5
         return signal.astype(np.int32)
-    
+
     def mulaw_decode(self, wav, qc):
         '''Recovers waveform from quantized values.'''
         mu = qc - 1
@@ -183,7 +183,7 @@ class AudioProcessor(object):
         # Perform inverse of mu-law transformation.
         magnitude = (1 / mu) * ((1 + mu)**abs(signal) - 1)
         return np.sign(signal) * magnitude
-    
+
 #     def trim_wav(self, wav, silence_threshold=2):
 #         for start in range(quantized.size):
 #             if abs(wav[start] - 127) > silence_threshold:
@@ -198,7 +198,7 @@ class AudioProcessor(object):
 #         return start, end
 
     def align_feats(self, wav, feat):
-        """Align audio signal and fetures. Audio signal needs to be 
+        """Align audio signal and fetures. Audio signal needs to be
         quantized.
         """
         assert len(wav.shape) == 1
