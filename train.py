@@ -44,6 +44,7 @@ def train(epoch):
             target = target.cuda()
         current_step = num_iter + epoch * len(train_loader) + 1
         optimizer.zero_grad()
+        # out = torch.nn.parallel.data_parallel(model, (wav, mel))
         out = model(wav, mel)
         loss, fp, tp = criterion(out, target, lens)
         loss.backward()
