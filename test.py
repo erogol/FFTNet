@@ -152,6 +152,7 @@ class TestLoaders(unittest.TestCase):
 
         count = 0
         last_T = 0
+        last_wav = None
         for data in dataloader:
             wavs = data[0]
             mels = data[1]
@@ -162,6 +163,9 @@ class TestLoaders(unittest.TestCase):
             assert wavs.shape[0] == mels.shape[0]
             assert wavs.shape[1] > RF
             assert wavs.max() > 0 and wavs.mean() > 0
+            if last_wav is not None:
+                assert last_wav.shape[0] <= wavs[0].shape[0]
+                assert last_wav.shape[0] <= wavs[1].shape[0]
             count += 1
             if count == MAX:
                 break

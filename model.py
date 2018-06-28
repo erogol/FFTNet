@@ -199,3 +199,27 @@ class MaskedCrossEntropyLoss(nn.Module):
         f = (f.squeeze() * mask_).sum()
         t = (t.squeeze() * mask_).sum()
         return ((losses * mask_).sum()) / mask_.sum(), f.item(), t.item()
+
+# https://discuss.pytorch.org/t/how-to-apply-exponential-moving-average-decay-for-variables/10856/4
+# https://www.tensorflow.org/api_docs/python/tf/train/ExponentialMovingAverage
+class EMA(object):
+    def __init__(self, decay):
+        self.decay = decay
+        self.shadow = {}
+
+    def register(self, name, val):
+        self.shadow[name] = val.clone()
+
+    def update(self, name, x):
+        assert name in self.shadow
+        update_delta = self.shadow[name] - x
+        self.shadow[name] -= (1.0 - self.decay) * update_delta
+
+    def assign_ema_model(self, model, new_model, cuda):
+       new_model.load_state_dict(model.state_dict())
+       for name, param in new_model.named_parameters():
+           if name in self.shadow:
+               param.data = self.shadow[name].clone()
+       if cuda:
+           new_model.cuda()
+       return new_model

@@ -16,6 +16,7 @@ from generic_utils import (Progbar, remove_experiment_folder,
                            count_parameters, check_update, get_commit_hash)
 from model import FFTNetModel
 from model import MaskedCrossEntropyLoss
+from model import EMA
 from dataset import LJSpeechDataset
 
 
@@ -23,6 +24,14 @@ def train(epoch):
     avg_loss = 0.0
     epoch_time = 0
     progbar = Progbar(len(train_loader.dataset) // c.batch_size)
+    if c.ema_decay > 0:
+        ema = EMA(c.ema_decay)
+        for name, param in model.named_parameters():
+            if param.requires_grad:
+                ema.register(name, param)
+    else:
+        ema = None
+    model.train()
     for num_iter, batch in enumerate(train_loader):
         start_time = time.time()
         wav = batch[0].unsqueeze(1)
@@ -35,8 +44,7 @@ def train(epoch):
             target = target.cuda()
         current_step = num_iter + epoch * len(train_loader) + 1
         optimizer.zero_grad()
-        # out = model(wav, mel)
-        out = torch.nn.parallel.data_parallel(model, (wav, mel))
+        out = model(wav, mel)
         loss, fp, tp = criterion(out, target, lens)
         loss.backward()
         grad_norm, skip_flag = check_update(model, 5, 100)
@@ -45,22 +53,31 @@ def train(epoch):
             print(" | > Iteration skipped!!")
             continue
         optimizer.step()
+        # model ema
+        if ema is not None:
+            for name, param in model.named_parameters():
+                if name in ema.shadow:
+                    ema.update(name, param.data)
         step_time = time.time() - start_time
         epoch_time += step_time
         # update
-        # print(" > Epoch: ", epoch)
         progbar.update(num_iter+1, values=[('total_loss', loss.item()),
                                            ('grad_norm', grad_norm.item()),
                                            ('fp', fp),
                                            ('tp', tp)
                                           ])
         avg_loss += loss.item()
+    return ema, avg_loss
 
 
-def evaluate(epoch):
+def evaluate(epoch, ema):
     avg_loss = 0.0
     epoch_time = 0
     progbar = Progbar(len(val_loader.dataset) // c.eval_batch_size)
+    ema_model = FFTNetModel(hid_channels=256, out_channels=256, n_layers=c.num_quant,
+                            cond_channels=80)
+    ema_model = ema.assign_ema_model(model, ema_model, use_cuda)
+    ema_model.eval()
     with torch.no_grad():
         for num_iter, batch in enumerate(train_loader):
             start_time = time.time()
@@ -73,13 +90,12 @@ def evaluate(epoch):
                 mel = mel.cuda()
                 target = target.cuda()
             current_step = num_iter + epoch * len(train_loader) + 1
-            out = model(wav, mel)
+            out = ema_model(wav, mel)
             loss, fp, tp = criterion(out, target, lens)
             step_time = time.time() - start_time
             epoch_time += step_time
             # update
             progbar.update(num_iter+1, values=[('total_loss', loss.item()),
-                                               ('grad_norm', grad_norm.item()),
                                                ('fp', fp),
                                                ('tp', tp)
                                               ])
@@ -88,8 +104,8 @@ def evaluate(epoch):
 
 def main(args):
     for epoch in range(c.epochs):
-        train(epoch)
-        evaluate(epoch)
+        ema, avg_loss = train(epoch)
+        avg_val_loss = evaluate(epoch, ema)
 
 if __name__ == "__main__":
 

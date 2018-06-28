@@ -16,6 +16,7 @@ from generic_utils import (Progbar, remove_experiment_folder,
                            count_parameters, check_update, get_commit_hash)
 from model import FFTNetModel
 from model import MaskedCrossEntropyLoss
+from model import EMA
 from dataset import LJSpeechDataset
 
 
@@ -23,6 +24,13 @@ def train(epoch):
     avg_loss = 0.0
     epoch_time = 0
     progbar = Progbar(len(train_loader.dataset) // c.batch_size)
+    if c.ema_decay > 0:
+        ema = EMA(c.ema_decay)
+        for name, param in model.named_parameters():
+            if param.requires_grad:
+                ema.register(name, param)
+    else:
+        ema = None
     for num_iter, batch in enumerate(train_loader):
         start_time = time.time()
         wav = batch[0].unsqueeze(1)
@@ -44,6 +52,11 @@ def train(epoch):
             print(" | > Iteration skipped!!")
             continue
         optimizer.step()
+        # model ema
+        if ema is not None:
+            for name, param in model.named_parameters():
+                if name in ema.shadow:
+                    ema.update(name, param.data)
         step_time = time.time() - start_time
         epoch_time += step_time
         # update
