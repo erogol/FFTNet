@@ -16,12 +16,13 @@
   "warmup_steps": 3000,
   "batch_size": 4,
   "eval_batch_size":32,
+  "ema_decay":0.99,
 
   "num_loader_workers": 8,
 
   "checkpoint": true,
   "save_step": 376,
-  "data_path": "C:\\Users\\erogol\\Data\\LJSpeech-1.1",
+  "data_path": "/snakepit/shared/data/keithito/LJSpeech-1.1/",
   "min_wav_len": 0,
   "max_wav_len": 5000,
   "output_path": "erogol_models"
