@@ -10,22 +10,19 @@ class FFTNetQueue(object):
         self.batch_size = batch_size
         self.num_channels = num_channels
         self.cuda = cuda
-        self.queue1 = []
-        self.queue2 = []
+        self.queue = []
         self.reset()
 
     def reset(self):
-        self.queue1 = torch.zeros([self.batch_size, self.num_channels, self.size])
-        self.queue2 = torch.zeros([self.batch_size, self.num_channels, self.size])
+        self.queue = torch.zeros([self.batch_size, self.num_channels, self.size])
         if self.cuda:
-            self.queue1 = self.queue1.cuda()
-            self.queue2 = self.queue2.cuda()
+            self.queue = self.queue.cuda()
 
-    def enqueue(self, x):
-        self.queue2[:, :, :-1] = self.queue2[:, :, 1:]
-        self.queue2[:, :, -1] = self.queue1[:, :, 0]
-        self.queue1[:, :, :-1] = self.queue1[:, :, 1:]
-        self.queue1[:, :, -1] = x.view(x.shape[0], x.shape[1])
+    def enqueue(self, x_push):
+        x_pop = self.queue[:, :, -1].data
+        self.queue[:, :, :-1] = self.queue[:, :, 1:]
+        self.queue[:, :, -1] = x_push.view(x_push.shape[0], x_push.shape[1])
+        return x_pop
 
 
 class FFTNet(nn.Module):
@@ -49,6 +46,13 @@ class FFTNet(nn.Module):
         self.init_weights(std_f)
         self.buffer = None
         self.cond_buffer = None
+        # inference params for linear operations
+        self.w1_1 = None
+        self.w1_2 = None
+        self.w2 = None
+        if cond_channels is not None:
+            self.wc1_1 = None
+            self.wc1_2 = None
 
     def init_weights(self, std_f):
         std = np.sqrt(std_f / self.in_channels)
@@ -91,31 +95,39 @@ class FFTNet(nn.Module):
     def forward_step(self, x, cx=None):
         T = x.shape[2]
         B = x.shape[0]
+        # linear weights
+        if self.w1_1 is None:
+            self.w1_1 = self._convert_to_fc_weights(self.conv1_1)
+            self.w1_2 = self._convert_to_fc_weights(self.conv1_2)
+        if cx is not None and self.wc1_1 is None:
+            self.wc1_1 = self._convert_to_fc_weights(self.convc1)
+            self.wc1_2 = self._convert_to_fc_weights(self.convc2)
+        if self.w2 is None:
+            self.w2 = self._convert_to_fc_weights(self.conv2)
+        # create buffer queues
         if self.buffer is None:
             self.buffer = FFTNetQueue(B, self.K, self.in_channels, x.is_cuda)
         if self.cond_channels is not None and self.cond_buffer is None:
             self.cond_buffer = FFTNetQueue(B, self.K, self.cond_channels, x.is_cuda)
-        self.buffer.enqueue(x)
+        # queue inputs
+        x_input = x.view([B, -1])
+        x_input2 = self.buffer.enqueue(x).view([B, -1])
         if self.cond_channels is not None:
-            self.cond_buffer.enqueue(cx)
-        x_input = self.buffer.queue1[:, :, 0].view([B, -1]).data
-        x_input2 = self.buffer.queue2[:, :, 0].view([B, -1]).data
-        w1_1 = self._convert_to_fc_weights(self.conv1_1)
-        w1_2 = self._convert_to_fc_weights(self.conv1_2)
-        z1 = torch.nn.functional.linear(x_input, w1_1, self.conv1_1.bias)
-        z2 = torch.nn.functional.linear(x_input2, w1_2, self.conv1_2.bias)
+            cx1 = cx.view([B, -1])
+            cx2 = self.cond_buffer.enqueue(cx).view([B, -1])
+        # perform first set of convs
+        z1 = torch.nn.functional.linear(x_input, self.w1_1, self.conv1_1.bias)
+        z2 = torch.nn.functional.linear(x_input2, self.w1_2, self.conv1_2.bias)
         z = z1 + z2
         if cx is not None:
-            cx1 = self.cond_buffer.queue1[:, :, 0].view([B, -1]).data
-            cx2 = self.cond_buffer.queue2[:, :,  0].view([B, -1]).data
-            wc1_1 = self._convert_to_fc_weights(self.convc1)
-            wc1_2 = self._convert_to_fc_weights(self.convc2)
-            cz1 = torch.nn.functional.linear(cx1, wc1_1, self.convc1.bias)
-            cz2 = torch.nn.functional.linear(cx2, wc1_2, self.convc2.bias)
+            self.wc1_1 = self._convert_to_fc_weights(self.convc1)
+            self.wc1_2 = self._convert_to_fc_weights(self.convc2)
+            cz1 = torch.nn.functional.linear(cx1, self.wc1_1, self.convc1.bias)
+            cz2 = torch.nn.functional.linear(cx2, self.wc1_2, self.convc2.bias)
             z = z + cz1 + cz2
+        # second conv
         z = self.relu(z)
-        w2 = self._convert_to_fc_weights(self.conv2)
-        z = torch.nn.functional.linear(z, w2, self.conv2.bias)
+        z = torch.nn.functional.linear(z, self.w2, self.conv2.bias)
         z = self.relu(z)
         z = z.view(B, -1, 1)
         return z
