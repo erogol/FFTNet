@@ -2,9 +2,10 @@
 [x] Short to long scheduling
 [x] Model averaging
 [ ] TF plotting
+[ ] Linearize weights in inference
 [x] Multi gpu training (test it on cluster)
 [x] Apply buffering for inference.
 [x] Overfit to a small part of the training set.
-[x] Clock the inference time with buffering
-  - ~0.003 sec per prediction on Dell XPS 15 GPU
+[x] Clock the inference time with buffering.
+  - ~0.003 sec per prediction on Dell XPS 15 CPU
   - ~0.009 sec on Dell XPS 15 GPU

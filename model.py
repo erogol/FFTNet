@@ -98,18 +98,33 @@ class FFTNet(nn.Module):
         self.buffer.enqueue(x)
         if self.cond_channels is not None:
             self.cond_buffer.enqueue(cx)
-        x_input = self.buffer.queue1[:, :, 0].view([1, self.in_channels, -1])
-        x_input2 = self.buffer.queue2[:, :, 0].view([1, self.in_channels, -1])
-        z1 = self.conv1_1(x_input)
-        z2 = self.conv1_2(x_input2)
+        x_input = self.buffer.queue1[:, :, 0].view([B, -1]).data
+        x_input2 = self.buffer.queue2[:, :, 0].view([B, -1]).data
+        w1_1 = self._convert_to_fc_weights(self.conv1_1)
+        w1_2 = self._convert_to_fc_weights(self.conv1_2)
+        z1 = torch.nn.functional.linear(x_input, w1_1, self.conv1_1.bias)
+        z2 = torch.nn.functional.linear(x_input2, w1_2, self.conv1_2.bias)
         z = z1 + z2
         if cx is not None:
-            cx1 = self.cond_buffer.queue1[:, :, 0].view(1, self.cond_channels, -1)
-            cx2 = self.cond_buffer.queue2[:, :,  0].view(1, self.cond_channels, -1)
-            cz1 = self.convc1(cx1)
-            cz2 = self.convc2(cx2)
+            cx1 = self.cond_buffer.queue1[:, :, 0].view([B, -1]).data
+            cx2 = self.cond_buffer.queue2[:, :,  0].view([B, -1]).data
+            wc1_1 = self._convert_to_fc_weights(self.convc1)
+            wc1_2 = self._convert_to_fc_weights(self.convc2)
+            cz1 = torch.nn.functional.linear(cx1, wc1_1, self.convc1.bias)
+            cz2 = torch.nn.functional.linear(cx2, wc1_2, self.convc2.bias)
             z = z + cz1 + cz2
+        z = self.relu(z)
+        w2 = self._convert_to_fc_weights(self.conv2)
+        z = torch.nn.functional.linear(z, w2, self.conv2.bias)
+        z = self.relu(z)
+        z = z.view(B, -1, 1)
         return z
+
+    def _convert_to_fc_weights(self, conv):
+        w = conv.weight
+        out_channels, in_channels, filter_size = w.shape
+        nw = w.transpose(1, 2).view(out_channels, -1).contiguous()
+        return nw
 
 
 class FFTNetModel(nn.Module):
