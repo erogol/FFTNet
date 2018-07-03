@@ -20,6 +20,8 @@ parser.add_argument('--out_path', type=str,
                     help='path to config file for training.')
 parser.add_argument('--config', type=str,
                     help='conf.json file for run settings.')
+parser.add_argument("--num_proc", type=int, default=8,
+                    help="number of processes.")
 args = parser.parse_args()
 
 # args.out_path = os.path.join(*args.out_path.split('/'))
@@ -31,6 +33,9 @@ CONFIG = load_config(args.config)
 ap = AudioProcessor(CONFIG.sample_rate, CONFIG.num_mels, CONFIG.num_freq, CONFIG.min_level_db,
                     CONFIG.frame_shift_ms, CONFIG.frame_length_ms, CONFIG.preemphasis,
                     CONFIG.ref_level_db)
+
+print(" > Input path: ", DATA_PATH)
+print(" > Output path: ", OUT_PATH)
 
 def extract_mel(file_path):
     # x, fs = sf.read(file_path)
@@ -45,8 +50,7 @@ def extract_mel(file_path):
 
 glob_path = os.path.join(DATA_PATH, "*.wav")
 print(" > Reading wav: {}".format(glob_path))
-file_names = glob.glob(glob_path)
-# file_names = glob.glob(glob_path, recursive=True)
+file_names = glob.glob(glob_path, recursive=True)
 
 if __name__ == "__main__":
     print(" > Number of files: %i"%(len(file_names)))
@@ -54,9 +58,16 @@ if __name__ == "__main__":
         os.makedirs(OUT_PATH)
         print(" > A new folder created at {}".format(OUT_PATH))
 
-    p = Pool(20)
-    r = list(tqdm.tqdm(p.imap(extract_mel, file_names), total=len(file_names)))
-    p.terminate()
+    r = []
+    if args.num_proc > 1:
+        print(" > Using {} processes.".format(args.num_proc))
+        with Pool(args.num_proc) as p:
+            r = list(tqdm.tqdm(p.imap(extract_mel, file_names), total=len(file_names)))
+    else:
+        print(" > Using single process run.")
+        for file_name in file_names:
+            print(" > ", file_name)
+            r.append(extract_mel(file_name))
 
     file_path = os.path.join(OUT_PATH, "meta_fftnet.csv")
     file = open(file_path, "w")

@@ -1,7 +1,7 @@
 [ ] Add conf files for windows and linux and keep win version segregated
 [x] Short to long scheduling
-[ ] Model averaging
-[ ] TF plotting 
+[x] Model averaging
+[ ] TF plotting
 [x] Multi gpu training (test it on cluster)
 [x] Apply buffering for inference.
 [x] Overfit to a small part of the training set.
