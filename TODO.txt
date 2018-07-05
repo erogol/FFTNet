@@ -1,8 +1,9 @@
 [ ] Add conf files for windows and linux and keep win version segregated
+[ ] Parallel wavenet kind of elaboration. 
 [x] Short to long scheduling
 [x] Model averaging
 [ ] TF plotting
-[ ] Linearize weights in inference
+[x] Linearize weights in inference
 [x] Multi gpu training (test it on cluster)
 [x] Apply buffering for inference.
 [x] Overfit to a small part of the training set.
