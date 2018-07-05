@@ -2,28 +2,28 @@
   "model_name": "debug",
   "num_mels": 80,
   "num_freq": 1025,
-  "sample_rate": 22050,
+  "sample_rate": 20000,
   "frame_length_ms": 50,
   "frame_shift_ms": 12.5,
   "preemphasis": 0.97,
   "min_level_db": -100,
   "ref_level_db": 20,
-  "embedding_size": 256,
   "num_quant": 11,
 
   "epochs": 1000,
   "lr": 0.001,
   "warmup_steps": 3000,
-  "batch_size": 4,
-  "eval_batch_size":32,
+  "batch_size": 48,
+  "eval_batch_size":16,
   "ema_decay":0.99,
 
   "num_loader_workers": 8,
+  "print_iter": 100,
 
   "checkpoint": true,
   "save_step": 376,
   "data_path": "/snakepit/shared/data/keithito/LJSpeech-1.1/",
   "min_wav_len": 0,
   "max_wav_len": 5000,
-  "output_path": "erogol_models"
+  "output_path": "runs/"
 }
