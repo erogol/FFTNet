@@ -43,9 +43,12 @@ def train(epoch):
             mel = mel.cuda()
             target = target.cuda()
         current_step = num_iter + epoch * len(train_loader) + 1
+        lr = lr_decay(c.lr, current_step, c.warmup_steps)
+        for params_group in optimizer.param_groups:
+            params_group['lr'] = lr
         optimizer.zero_grad()
-        # out = torch.nn.parallel.data_parallel(model, (wav, mel))
-        out = model(wav, mel)
+        out = torch.nn.parallel.data_parallel(model, (wav, mel))
+        # out = model(wav, mel)
         loss, fp, tp = criterion(out, target, lens)
         loss.backward()
         grad_norm, skip_flag = check_update(model, 5, 100)
@@ -62,12 +65,15 @@ def train(epoch):
         step_time = time.time() - start_time
         epoch_time += step_time
         # update
-        progbar.update(num_iter+1, values=[('total_loss', loss.item()),
-                                           ('grad_norm', grad_norm.item()),
-                                           ('fp', fp),
-                                           ('tp', tp)
-                                          ])
+        # progbar.update(num_iter+1, values=[('total_loss', loss.item()),
+        #                                    ('grad_norm', grad_norm.item()),
+        #                                    ('fp', fp),
+        #                                    ('tp', tp)
+        #                                   ])
+        if current_step % c.print_iter == 0:
+            print(" | > loss:{:.4f}\tgrad_norm:{:.4f}\tfp:{}\ttp:{}\tlr:{:.5f}\t".format(loss.item(), grad_norm, fp, tp, params_group['lr']))
         avg_loss += loss.item()
+    avg_loss /= num_iter
     return ema, avg_loss
 
 
@@ -96,17 +102,21 @@ def evaluate(epoch, ema):
             step_time = time.time() - start_time
             epoch_time += step_time
             # update
-            progbar.update(num_iter+1, values=[('total_loss', loss.item()),
-                                               ('fp', fp),
-                                               ('tp', tp)
-                                              ])
+            # progbar.update(num_iter+1, values=[('total_loss', loss.item()),
+            #                                    ('fp', fp),
+            #                                    ('tp', tp)
+            #                                   ])
             avg_loss += loss.item()
+    avg_loss /= num_iter
+    return avg_loss
 
 
 def main(args):
     for epoch in range(c.epochs):
+        print(" > Epoch: ", epoch)
         ema, avg_loss = train(epoch)
         avg_val_loss = evaluate(epoch, ema)
+        print(" -- loss:{:.5f}\tval_loss:{:.5f}".format(avg_loss, avg_val_loss))
 
 if __name__ == "__main__":
 
