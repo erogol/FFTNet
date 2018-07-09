@@ -10,7 +10,7 @@ import torch
 from torch.utils.data import DataLoader
 
 from tensorboardX import SummaryWriter
-from generic_utils import (Progbar, remove_experiment_folder,
+from generic_utils import (remove_experiment_folder,
                            create_experiment_folder, save_checkpoint,
                            save_best_model, load_config, lr_decay,
                            count_parameters, check_update, get_commit_hash)
@@ -23,7 +23,8 @@ from dataset import LJSpeechDataset
 def train(epoch):
     avg_loss = 0.0
     epoch_time = 0
-    progbar = Progbar(len(train_loader.dataset) // c.batch_size)
+    # progbar = Progbar(len(train_loader.dataset) // c.batch_size)
+    num_iter_epoch = len(train_loader.dataset) // c.batch_size
     if c.ema_decay > 0:
         ema = EMA(c.ema_decay)
         for name, param in model.named_parameters():
