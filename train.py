@@ -52,7 +52,7 @@ def train(epoch):
         # out = model(wav, mel)
         loss, fp, tp = criterion(out, target, lens)
         loss.backward()
-        grad_norm, skip_flag = check_update(model, 5, 100)
+        grad_norm, skip_flag = check_update(model, c.grad_clip, c.grad_top)
         if skip_flag:
             optimizer.zero_grad()
             print(" | > Iteration skipped!!")
@@ -65,14 +65,12 @@ def train(epoch):
                     ema.update(name, param.data)
         step_time = time.time() - start_time
         epoch_time += step_time
-        # update
-        # progbar.update(num_iter+1, values=[('total_loss', loss.item()),
-        #                                    ('grad_norm', grad_norm.item()),
-        #                                    ('fp', fp),
-        #                                    ('tp', tp)
-        #                                   ])
         if current_step % c.print_iter == 0:
-            print(" | > loss:{:.4f}\tgrad_norm:{:.4f}\tfp:{}\ttp:{}\tlr:{:.5f}\t".format(loss.item(), grad_norm, fp, tp, params_group['lr']))
+            print(" | > step:{}/{}\tgloba_step:{}\tloss:{:.4f}\tgrad_norm:{:.4f}\t\
+                  fp:{}\ttp:{}\tlr:{:.5f}\t".format(num_iter, num_iter_epoch,
+                                                    current_step,
+                                                    loss.item(), grad_norm, fp,
+                                                    tp, params_group['lr']))
         avg_loss += loss.item()
     avg_loss /= num_iter
     return ema, avg_loss
@@ -81,7 +79,7 @@ def train(epoch):
 def evaluate(epoch, ema):
     avg_loss = 0.0
     epoch_time = 0
-    progbar = Progbar(len(val_loader.dataset) // c.eval_batch_size)
+    # progbar = Progbar(len(val_loader.dataset) // c.eval_batch_size)
     ema_model = FFTNetModel(hid_channels=256, out_channels=256, n_layers=c.num_quant,
                             cond_channels=80)
     ema_model = ema.assign_ema_model(model, ema_model, use_cuda)
@@ -102,11 +100,6 @@ def evaluate(epoch, ema):
             loss, fp, tp = criterion(out, target, lens)
             step_time = time.time() - start_time
             epoch_time += step_time
-            # update
-            # progbar.update(num_iter+1, values=[('total_loss', loss.item()),
-            #                                    ('fp', fp),
-            #                                    ('tp', tp)
-            #                                   ])
             avg_loss += loss.item()
     avg_loss /= num_iter
     return avg_loss
@@ -114,7 +107,7 @@ def evaluate(epoch, ema):
 
 def main(args):
     for epoch in range(c.epochs):
-        print(" > Epoch: ", epoch)
+        print(" > Epoch:{}/{}".format(epoch, c.epochs))
         ema, avg_loss = train(epoch)
         avg_val_loss = evaluate(epoch, ema)
         print(" -- loss:{:.5f}\tval_loss:{:.5f}".format(avg_loss, avg_val_loss))
