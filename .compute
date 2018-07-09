@@ -1,3 +1,4 @@
 #!/bin/bash
-source ./tmp/venv/bin/activate
-python extract_mel.py --data_path /snakepit/shared/data/keithito/LJSpeech-1.1/wavs  --out_path /snakepit/shared/data/keithito/LJSpeech-1.1/mels --config conf.json
+source ../tmp/venv/bin/activate
+# python extract_mel.py --data_path /snakepit/shared/data/keithito/LJSpeech-1.1/wavs  --out_path /snakepit/shared/data/keithito/LJSpeech-1.1/mels --config conf.json
+python train.py --config_path conf.json --debug true
