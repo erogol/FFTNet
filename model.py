@@ -27,7 +27,7 @@ class FFTNetQueue(object):
 
 class FFTNet(nn.Module):
     def __init__(self, in_channels, out_channels, hid_channels, layer_id,
-                 cond_channels=None, std_f=1.0):
+                 cond_channels=None, std_f=0.5):
         super(FFTNet, self).__init__()
         self.layer_id = layer_id
         self.receptive_field = 2**layer_id
