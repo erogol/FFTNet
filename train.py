@@ -22,15 +22,19 @@ from dataset import LJSpeechDataset
 
 def train(epoch):
     avg_loss = 0.0
+    avg_step_time = 0
     epoch_time = 0
     # progbar = Progbar(len(train_loader.dataset) // c.batch_size)
     num_iter_epoch = len(train_loader.dataset) // c.batch_size
     if c.ema_decay > 0:
+        print(" > EMA is active.")
         ema = EMA(c.ema_decay)
         for name, param in model.named_parameters():
             if param.requires_grad:
                 ema.register(name, param)
     else:
+        print(" > EMA is deactive.")
+        # if ema == 0
         ema = None
     model.train()
     for num_iter, batch in enumerate(train_loader):
@@ -65,14 +69,16 @@ def train(epoch):
                     ema.update(name, param.data)
         step_time = time.time() - start_time
         epoch_time += step_time
+        avg_step_time = epoch_time / (num_iter + 1)
         if current_step % c.print_iter == 0:
-            print(" | > step:{}/{}\tgloba_step:{}\tloss:{:.4f}\tgrad_norm:{:.4f}\t\
-                  fp:{}\ttp:{}\tlr:{:.5f}\t".format(num_iter, num_iter_epoch,
-                                                    current_step,
-                                                    loss.item(), grad_norm, fp,
-                                                    tp, params_group['lr']))
+            print(" | > s:{}/{}  gs:{}  loss:{:.4f}  gn:{:.4f} "\
+                  "fp:{}  tp:{}  lr:{:.5f}  st:{:.2f}  ast:{:.2f}".format(num_iter, num_iter_epoch,
+                                                                current_step,
+                                                                loss.item(), grad_norm, fp,
+                                                                tp, params_group['lr'],
+                                                                step_time, avg_step_time))
         avg_loss += loss.item()
-    avg_loss /= num_iter
+    avg_loss /= (num_iter + 1)
     return ema, avg_loss
 
 
@@ -110,7 +116,7 @@ def main(args):
         print(" > Epoch:{}/{}".format(epoch, c.epochs))
         ema, avg_loss = train(epoch)
         avg_val_loss = evaluate(epoch, ema)
-        print(" -- loss:{:.5f}\tval_loss:{:.5f}".format(avg_loss, avg_val_loss))
+        print(" -- Loss:{:.5f}  ValLoss:{:.5f}".format(avg_loss, avg_val_loss))
 
 if __name__ == "__main__":
 
@@ -140,6 +146,7 @@ if __name__ == "__main__":
 
     model = FFTNetModel(hid_channels=256, out_channels=256, n_layers=c.num_quant,
                         cond_channels=80)
+
     criterion = MaskedCrossEntropyLoss()
     # criterion = torch.nn.CrossEntropyLoss()
     optimizer = torch.optim.Adam(model.parameters(), lr=c.lr)
