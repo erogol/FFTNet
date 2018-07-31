@@ -1,5 +1,6 @@
-[ ] Add conf files for windows and linux and keep win version segregated
-[ ] Parallel wavenet kind of elaboration. 
+[ ] Obviate gradient explosion.
+[x] Add conf files for windows and linux and keep win version segregated
+[ ] Parallel wavenet kind of elaboration.
 [x] Short to long scheduling
 [x] Model averaging
 [ ] TF plotting
