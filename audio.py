@@ -11,8 +11,8 @@ _mel_basis = None
 class AudioProcessor(object):
     def __init__(
         self,
-        sample_rate,
         bits,
+        sample_rate,
         num_mels,
         min_level_db,
         frame_shift_ms,
@@ -20,12 +20,13 @@ class AudioProcessor(object):
         ref_level_db,
         num_freq,
         preemphasis,
+        griffin_lim_iters=None,
     ):
 
         print(" > Setting up Audio Processor...")
+        self.bits = bits
         self.sample_rate = sample_rate
         self.num_mels = num_mels
-        self.bits = bits
         self.min_level_db = min_level_db
         self.frame_shift_ms = frame_shift_ms
         self.frame_length_ms = frame_length_ms
@@ -171,17 +172,5 @@ class AudioProcessor(object):
     def quantize(self, x):
         return (x + 1.) * (2 ** self.bits - 1) / 2
 
-    def align_feats(self, wav, feat):
-        """Align audio signal and fetures. Audio signal needs to be
-        quantized.
-        """
-        assert len(wav.shape) == 1
-        assert len(feat.shape) == 2
-
-        factor = wav.size // feat.shape[0]
-        feat = np.repeat(feat, factor, axis=0)
-        n_pad = wav.size - feat.shape[0]
-        if n_pad != 0:
-            assert n_pad > 0
-            feat = np.pad(feat, [(0, n_pad), (0, 0)], mode="constant", constant_values=0)
-        return feat
+    def dequantize(self, x):
+        return 2 * x / (2 ** self.bits - 1) - 1

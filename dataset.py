@@ -17,6 +17,7 @@ class LJSpeechDataset(Dataset):
                  dataset_ids,
                  data_dir,
                  num_quant,
+                 bits,
                  min_wav_len=0,
                  max_wav_len=8000,
                  rand_offset=True):
@@ -26,6 +27,7 @@ class LJSpeechDataset(Dataset):
         self.min_wav_len = min_wav_len
         self.max_wav_len = max_wav_len
         self.rand_offset = rand_offset
+        self.bits = bits
         self.receptive_field = 2**num_quant
         print(" > Reading LJSpeech from - {}".format(data_dir))
         print(" | > Number of instances : {}".format(len(self.dataset_ids)))
@@ -34,7 +36,7 @@ class LJSpeechDataset(Dataset):
         print(" | > Receptive field: {}".format(self.receptive_field))
 
     def __len__(self):
-        return len(self.data_dir)
+        return len(self.dataset_ids)
 
     def __getitem__(self, idx):
         file = self.dataset_ids[idx]
@@ -123,6 +125,10 @@ class LJSpeechDataset(Dataset):
             targets = torch.LongTensor(wavs[:, self.receptive_field:])
             inputs = torch.FloatTensor(wavs[:, :-1])
             pred_lens = torch.LongTensor(pred_lens)
+            # normalize input to [-1, 1]
+            inputs[:, self.receptive_field -
+                   1:] = 2 * inputs[:, self.receptive_field - 1:] / (
+                       2**self.bits - 1.) - 1.
             return inputs, mels, pred_lens, targets, wav_files, mel_files
 
         raise TypeError(("batch must contain tensors, numbers, dicts or lists;\

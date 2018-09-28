@@ -162,13 +162,17 @@ class TestLayers(unittest.TestCase):
 class TestLoaders(unittest.TestCase):
     def test_ljspeech_loader(self):
         print(" ---- Run data loader for 100 iterations ----")
-        MAX = 10
-        RF = 11
-        C = load_config('test_conf.json')
-        with open(f"{C.data_path}dataset_ids.pkl", "rb") as f:
+        MAX_ITER = 10
+
+        C = load_config('test_config.json')
+        OUT_PATH = os.path.join(C.output_path, C.run_name)
+        DATA_PATH = f"{OUT_PATH}/data/"
+
+        with open(f"{DATA_PATH}dataset_ids.pkl", "rb") as f:
             dataset_ids = pickle.load(f)
-        dataset = LJSpeechDataset(dataset_ids, C.data_path, RF, C.min_wav_len,
-                                  C.max_wav_len)
+
+        dataset = LJSpeechDataset(dataset_ids, DATA_PATH, C.num_quant, C.bits,
+                                  C.min_wav_len, C.max_wav_len)
         dataloader = DataLoader(
             dataset,
             batch_size=2,
@@ -181,18 +185,29 @@ class TestLoaders(unittest.TestCase):
         last_T = 0
         last_wav = None
         for data in dataloader:
-            wavs = data[0]
-            mels = data[1]
+            inputs = data[0]  # B x T
+            mels = data[1]  # B x T x D
+            target = data[3]
             print(" > iter: ", count)
-            assert wavs.shape[1] >= last_T
-            last_T = wavs.shape[1]
-            assert wavs.shape[1] == mels.shape[1]
-            assert wavs.shape[0] == mels.shape[0]
-            assert wavs.shape[1] > RF
-            assert wavs.max() > 0 and wavs.mean() > 0
+            # check seq len should increase for each new iteration
+            assert inputs.shape[1] >= last_T
+            last_T = inputs.shape[1]
+            # check the compatibility btw mel and wav
+            assert inputs.shape[1] == mels.shape[1]
+            assert inputs.shape[0] == mels.shape[0]
+            assert inputs.shape[1] > 2**C.num_quant
+            # check if inputs normalized correctly
+            assert inputs.max() <= 1 and inputs.min() >= -1
+            # check receptive field padding
+            assert inputs[:, :2**C.num_quant - 1].sum() == 0
+            assert inputs[:, :2**C.num_quant].sum() != 0
+            # check inputs vs target
+            inputs = ((inputs + 1) / 2) * (2**C.bits - 1)  # denormalize
+            inputs = inputs.type_as(target)
+            assert abs(inputs[0, dataset.receptive_field:] - target[0, :-1]).sum() == 0
             if last_wav is not None:
-                assert last_wav.shape[0] <= wavs[0].shape[0]
-                assert last_wav.shape[0] <= wavs[1].shape[0]
+                assert last_wav.shape[0] <= inputs[0].shape[0]
+                assert last_wav.shape[0] <= inputs[1].shape[0]
             count += 1
-            if count == MAX:
+            if count == MAX_ITER:
                 break

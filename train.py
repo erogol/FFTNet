@@ -168,25 +168,25 @@ if __name__ == "__main__":
     _ = os.path.dirname(os.path.realpath(__file__))
     OUT_PATH = os.path.join(_, c.output_path)
     OUT_PATH = create_experiment_folder(OUT_PATH, c.run_name, True)
-    DATA_PATH = os.path.join(OUT_PATH, 'data')
+    DATA_PATH = os.path.join(c.output_path, c.run_name, 'data/')
     shutil.copyfile(args.config_path, os.path.join(OUT_PATH, 'config.json'))
 
     # setup tensorboard
     tb = SummaryWriter(OUT_PATH)
 
-    with open(f"{c.data_path}dataset_ids.pkl", "rb") as f:
+    with open(f"{DATA_PATH}dataset_ids.pkl", "rb") as f:
         dataset_ids = pickle.load(f)
 
     eval_size = c.eval_batch_size * 2
-    train_dataset = LJSpeechDataset(dataset_ids[eval_size:], DATA_PATH, c.num_quant,
+    train_dataset = LJSpeechDataset(dataset_ids[eval_size:], DATA_PATH, c.num_quant, c.bits,
                                     c.min_wav_len, c.max_wav_len, False)
-    val_dataset = LJSpeechDataset(dataset_ids[0:eval_size], DATA_PATH, c.num_quant,
+    val_dataset = LJSpeechDataset(dataset_ids[0:eval_size], DATA_PATH, c.num_quant, c.bits,
                                     c.min_wav_len, c.max_wav_len, False)
 
     train_loader = DataLoader(
         train_dataset,
         batch_size=c.batch_size,
-        shuffle=True,
+        shuffle=False,
         collate_fn=train_dataset.collate_fn,
         drop_last=True,
         num_workers=c.num_loader_workers)
@@ -201,7 +201,7 @@ if __name__ == "__main__":
 
     model = FFTNetModel(
         hid_channels=256,
-        out_channels=256,
+        out_channels=2 ** c.bits,
         n_layers=c.num_quant,
         cond_channels=80)
 
