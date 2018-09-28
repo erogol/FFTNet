@@ -1,31 +1,35 @@
 {
-  "model_name": "debug",
+  "run_name": "fftnet",
+  "bits": 9,
+  "num_quant": 11,
+
   "num_mels": 80,
   "num_freq": 1025,
-  "sample_rate": 20000,
+  "sample_rate": 22000,
   "frame_length_ms": 50,
   "frame_shift_ms": 12.5,
   "preemphasis": 0.97,
   "min_level_db": -100,
   "ref_level_db": 20,
-  "num_quant": 11,
 
   "epochs": 1000,
   "lr": 0.001,
-  "warmup_steps": 2000,
-  "batch_size": 86,
-  "eval_batch_size":48,
+  "warmup_steps": 3000,
+  "batch_size": 16,
+  "eval_batch_size": 16,
   "ema_decay":0,
+  "checkpoint_step": 1000,
+  "print_step": 10,
   "grad_top": 150,
   "grad_clip": 10,
+  "num_loader_workers": 4,
 
-  "num_loader_workers": 14,
-  "print_iter": 5,
+  "data_path": "/snakepit/shared/data/keithito/LJSpeech-1.1/",
+  "output_path": "runs/",
 
   "checkpoint": true,
+  "print_iter": 5,
   "save_step": 2000,
-  "data_path": "/snakepit/shared/data/keithito/LJSpeech-1.1/",
   "min_wav_len": 0,
-  "max_wav_len": 5000,
-  "output_path": "runs/"
+  "max_wav_len": 5000
 }
