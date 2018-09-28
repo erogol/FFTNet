@@ -11,3 +11,4 @@
 [x] Clock the inference time with buffering.
   - ~0.003 sec per prediction on Dell XPS 15 CPU
   - ~0.009 sec on Dell XPS 15 GPU
+[ ] Add checkpointing

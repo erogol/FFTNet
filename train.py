@@ -10,10 +10,10 @@ import torch
 from torch.utils.data import DataLoader
 
 from tensorboardX import SummaryWriter
-from generic_utils import (remove_experiment_folder,
-                           create_experiment_folder, save_checkpoint,
-                           save_best_model, load_config, lr_decay,
-                           count_parameters, check_update, get_commit_hash)
+from generic_utils import (remove_experiment_folder, create_experiment_folder,
+                           save_checkpoint, save_best_model, load_config,
+                           lr_decay, count_parameters, check_update,
+                           get_commit_hash)
 from model import FFTNetModel
 from model import MaskedCrossEntropyLoss
 from model import EMA
@@ -47,7 +47,8 @@ def train(epoch):
             wav = wav.cuda()
             mel = mel.cuda()
             target = target.cuda()
-        current_step = num_iter + epoch * len(train_loader) + 1
+        current_step = num_iter + args.restore_step + epoch * len(
+            train_loader) + 1
         lr = lr_decay(c.lr, current_step, c.warmup_steps)
         for params_group in optimizer.param_groups:
             params_group['lr'] = lr
@@ -77,18 +78,36 @@ def train(epoch):
                                                                 loss.item(), grad_norm, fp,
                                                                 tp, params_group['lr'],
                                                                 step_time, avg_step_time))
+        if c.checkpoint and current_step % c.save_step == 0:
+            if c.ema_decay > 0:
+                ema_model = FFTNetModel(
+                    hid_channels=256,
+                    out_channels=256,
+                    n_layers=c.num_quant,
+                    cond_channels=80)
+                ema_model = ema.assign_ema_model(model, ema_model, use_cuda)
+                save_checkpoint(ema_model, optimizer, loss, OUT_PATH,
+                                current_step, epoch)
+            else:
+                save_checkpoint(model, optimizer, loss, OUT_PATH, current_step,
+                                epoch)
         avg_loss += loss.item()
     avg_loss /= (num_iter + 1)
     return ema, avg_loss
 
 
-def evaluate(epoch, ema):
+def evaluate(epoch, ema, best_loss):
     avg_loss = 0.0
     epoch_time = 0
-    # progbar = Progbar(len(val_loader.dataset) // c.eval_batch_size)
-    ema_model = FFTNetModel(hid_channels=256, out_channels=256, n_layers=c.num_quant,
-                            cond_channels=80)
-    ema_model = ema.assign_ema_model(model, ema_model, use_cuda)
+    if c.ema_decay > 0:
+        ema_model = FFTNetModel(
+            hid_channels=256,
+            out_channels=256,
+            n_layers=c.num_quant,
+            cond_channels=80)
+        ema_model = ema.assign_ema_model(model, ema_model, use_cuda)
+    else:
+        ema_model = model
     ema_model.eval()
     with torch.no_grad():
         for num_iter, batch in enumerate(train_loader):
@@ -108,15 +127,20 @@ def evaluate(epoch, ema):
             epoch_time += step_time
             avg_loss += loss.item()
     avg_loss /= num_iter
-    return avg_loss
+    best_loss = save_best_model(ema_model, optimizer, avg_loss, best_loss,
+                                OUT_PATH, current_step, epoch)
+    return avg_loss, best_loss
 
 
 def main(args):
+    best_loss = float('inf')
     for epoch in range(c.epochs):
         print(" > Epoch:{}/{}".format(epoch, c.epochs))
         ema, avg_loss = train(epoch)
-        avg_val_loss = evaluate(epoch, ema)
-        print(" -- Loss:{:.5f}  ValLoss:{:.5f}".format(avg_loss, avg_val_loss))
+        avg_val_loss, best_loss = evaluate(epoch, ema, best_loss)
+        print(" -- Loss:{:.5f}  ValLoss:{:.5f} BestValLoss:{:.5f}".format(
+            avg_loss, avg_val_loss, best_loss))
+
 
 if __name__ == "__main__":
 
@@ -126,64 +150,91 @@ if __name__ == "__main__":
         torch.backends.cudnn.benchmark = False
 
     parser = argparse.ArgumentParser()
-    parser.add_argument('--config_path', type=str,
-                        help='path to config file for training',)
-    parser.add_argument('--debug', type=bool, default=False,
-                        help='Stop asking for git hash before the run.')
-    parser.add_argument('--finetune_path', type=str)
+    parser.add_argument(
+        '--config_path',
+        type=str,
+        help='path to config file for training',
+    )
+    parser.add_argument(
+        '--debug',
+        type=bool,
+        default=False,
+        help='Stop asking for git hash before the run.')
+    parser.add_argument('--restore_path', type=str, default=0)
     args = parser.parse_args()
     c = load_config(args.config_path)
 
     # setup output paths and read configs
     _ = os.path.dirname(os.path.realpath(__file__))
     OUT_PATH = os.path.join(_, c.output_path)
-    OUT_PATH = create_experiment_folder(OUT_PATH, c.model_name, True)
-    CHECKPOINT_PATH = os.path.join(OUT_PATH, 'checkpoints')
+    OUT_PATH = create_experiment_folder(OUT_PATH, c.run_name, True)
+    DATA_PATH = os.path.join(OUT_PATH, 'data')
     shutil.copyfile(args.config_path, os.path.join(OUT_PATH, 'config.json'))
 
     # setup tensorboard
     tb = SummaryWriter(OUT_PATH)
 
-    model = FFTNetModel(hid_channels=256, out_channels=256, n_layers=c.num_quant,
-                        cond_channels=80)
+    with open(f"{c.data_path}dataset_ids.pkl", "rb") as f:
+        dataset_ids = pickle.load(f)
+
+    eval_size = c.eval_batch_size * 2
+    train_dataset = LJSpeechDataset(dataset_ids[eval_size:], DATA_PATH, c.num_quant,
+                                    c.min_wav_len, c.max_wav_len, False)
+    val_dataset = LJSpeechDataset(dataset_ids[0:eval_size], DATA_PATH, c.num_quant,
+                                    c.min_wav_len, c.max_wav_len, False)
+
+    train_loader = DataLoader(
+        train_dataset,
+        batch_size=c.batch_size,
+        shuffle=True,
+        collate_fn=train_dataset.collate_fn,
+        drop_last=True,
+        num_workers=c.num_loader_workers)
+
+    val_loader = DataLoader(
+        val_dataset,
+        batch_size=c.eval_batch_size,
+        shuffle=False,
+        collate_fn=val_dataset.collate_fn,
+        drop_last=True,
+        num_workers=4)
+
+    model = FFTNetModel(
+        hid_channels=256,
+        out_channels=256,
+        n_layers=c.num_quant,
+        cond_channels=80)
 
     criterion = MaskedCrossEntropyLoss()
     # criterion = torch.nn.CrossEntropyLoss()
     optimizer = torch.optim.Adam(model.parameters(), lr=c.lr)
+
+    if args.restore_path:
+        checkpoint = torch.load(args.restore_path)
+        model.load_state_dict(checkpoint['model'])
+        if use_cuda:
+            model = model.cuda()
+            criterion.cuda()
+        optimizer.load_state_dict(checkpoint['optimizer'])
+        for state in optimizer.state.values():
+            for k, v in state.items():
+                if torch.is_tensor(v):
+                    state[k] = v.cuda()
+        print(
+            " > Model restored from step %d" % checkpoint['step'], flush=True)
+        start_epoch = checkpoint['step'] // len(train_loader)
+        best_loss = checkpoint['loss']
+        args.restore_step = checkpoint['step']
+    else:
+        args.restore_step = 0
+        print("\n > Starting a new training", flush=True)
+        if use_cuda:
+            model = model.cuda()
+            criterion.cuda()
+
     num_params = count_parameters(model)
     print(" > Models has {} parameters".format(num_params))
 
-    if use_cuda:
-        model.cuda()
-        criterion.cuda()
-
-    train_dataset = LJSpeechDataset(os.path.join(c.data_path, "mels",
-                                                 "meta_fftnet_train.csv"),
-                              os.path.join(c.data_path, "mels"),
-                              c.sample_rate,
-                              c.num_mels, c.num_freq,
-                              c.min_level_db, c.frame_shift_ms,
-                              c.frame_length_ms, c.preemphasis, c.ref_level_db,
-                              c.num_quant, c.min_wav_len, c.max_wav_len, False)
-
-    val_dataset =  LJSpeechDataset(os.path.join(c.data_path, "mels",
-                                               "meta_fftnet_val.csv"),
-                                 os.path.join(c.data_path, "mels"),
-                                 c.sample_rate,
-                                 c.num_mels, c.num_freq,
-                                 c.min_level_db, c.frame_shift_ms,
-                                 c.frame_length_ms, c.preemphasis,
-                                 c.ref_level_db, c.num_quant, c.min_wav_len,
-                                 c.max_wav_len, False)
-
-
-    train_loader = DataLoader(train_dataset, batch_size=c.batch_size,
-                            shuffle=False, collate_fn=train_dataset.collate_fn,
-                            drop_last=True, num_workers=c.num_loader_workers)
-
-    val_loader = DataLoader(val_dataset, batch_size=c.eval_batch_size,
-                            shuffle=False, collate_fn=train_dataset.collate_fn,
-                            drop_last=True, num_workers=4)
     try:
         main(args)
         remove_experiment_folder(OUT_PATH)

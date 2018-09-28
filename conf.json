@@ -11,16 +11,16 @@
   "num_quant": 11,
 
   "epochs": 1000,
-  "lr": 0.003,
-  "warmup_steps": 3000,
-  "batch_size": 128,
+  "lr": 0.001,
+  "warmup_steps": 2000,
+  "batch_size": 86,
   "eval_batch_size":48,
   "ema_decay":0,
   "grad_top": 150,
   "grad_clip": 10,
 
   "num_loader_workers": 14,
-  "print_iter": 100,
+  "print_iter": 5,
 
   "checkpoint": true,
   "save_step": 2000,

@@ -1,77 +1,80 @@
-import os
-import sys
-import time
-import glob
-import argparse
-# import soundfile as sf
 import librosa
+import argparse
+import matplotlib.pyplot as plt
+import math, pickle, os, glob
 import numpy as np
-import tqdm
-from audio import AudioProcessor
+from tqdm import tqdm
 from generic_utils import load_config
-
+from audio import AudioProcessor
 from multiprocessing import Pool
 
 
-parser = argparse.ArgumentParser()
-parser.add_argument('--data_path', type=str,
-                    help='Folder path to checkpoints.')
-parser.add_argument('--out_path', type=str,
-                    help='path to config file for training.')
-parser.add_argument('--config', type=str,
-                    help='conf.json file for run settings.')
-parser.add_argument("--num_proc", type=int, default=8,
-                    help="number of processes.")
-args = parser.parse_args()
+def get_files(path, extension='.wav') :
+    filenames = []
+    for filename in glob.iglob(f'{path}/**/*{extension}', recursive=True):
+        filenames += [filename]
+    return filenames
 
-# args.out_path = os.path.join(*args.out_path.split('/'))
-# args.data_path = os.path.join(*args.data_path.split('/'))
 
-DATA_PATH = args.data_path
-OUT_PATH = args.out_path
-CONFIG = load_config(args.config)
-ap = AudioProcessor(CONFIG.sample_rate, CONFIG.num_mels, CONFIG.num_freq, CONFIG.min_level_db,
-                    CONFIG.frame_shift_ms, CONFIG.frame_length_ms, CONFIG.preemphasis,
-                    CONFIG.ref_level_db)
+def convert_file(path) :
+    wav = ap.load_wav(path, encode=False)
+    mel = ap.melspectrogram(wav)
+    quant = ap.quantize(wav)
+    quant = quant.clip(0,2**bits-1)
+    return mel.astype(np.float32), quant.astype(np.int), wav
 
-print(" > Input path: ", DATA_PATH)
-print(" > Output path: ", OUT_PATH)
 
-def extract_mel(file_path):
-    # x, fs = sf.read(file_path)
-    x, fs = librosa.load(file_path, CONFIG.sample_rate)
-    mel = ap.melspectrogram(x.astype('float32'))
-    file_name = os.path.basename(file_path).replace(".wav","")
-    mel_file = file_name + ".mel"
-    np.save(os.path.join(OUT_PATH, mel_file), mel, allow_pickle=False)
-    mel_len = mel.shape[1]
-    wav_len = x.shape[0]
-    return file_path, mel_file, str(wav_len), str(mel_len)
+def process_wav(wav_path):
+    idx = wav_path.split('/')[-1][:-4]
+    m, x, wav = convert_file(wav_path)
+    assert x.max() < 2**bits, wav_path
+    assert x.min() >= 0
+    np.save(f'{MEL_PATH}{idx}.npy', m)
+    np.save(f'{QUANT_PATH}{idx}.npy', x)
+    return idx
 
-glob_path = os.path.join(DATA_PATH, "*.wav")
-print(" > Reading wav: {}".format(glob_path))
-file_names = glob.glob(glob_path, recursive=True)
 
 if __name__ == "__main__":
-    print(" > Number of files: %i"%(len(file_names)))
-    if not os.path.exists(OUT_PATH):
-        os.makedirs(OUT_PATH)
-        print(" > A new folder created at {}".format(OUT_PATH))
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        '--config_path',
+        type=str,
+        help='path to config file for feature extraction',
+    )
+    args = parser.parse_args()
 
-    r = []
-    if args.num_proc > 1:
-        print(" > Using {} processes.".format(args.num_proc))
-        with Pool(args.num_proc) as p:
-            r = list(tqdm.tqdm(p.imap(extract_mel, file_names), total=len(file_names)))
-    else:
-        print(" > Using single process run.")
-        for file_name in file_names:
-            print(" > ", file_name)
-            r.append(extract_mel(file_name))
+    config_path = args.config_path
+    CONFIG = load_config(config_path)
+    
+    bits = CONFIG.bits
+    ap = AudioProcessor(CONFIG.sample_rate, CONFIG.bits, CONFIG.num_mels, CONFIG.min_level_db,
+                        CONFIG.frame_shift_ms, CONFIG.frame_length_ms,
+                        CONFIG.ref_level_db, CONFIG.num_freq, CONFIG.preemphasis)   
 
-    file_path = os.path.join(OUT_PATH, "meta_fftnet.csv")
-    file = open(file_path, "w")
-    for line in r:
-        line = ", ".join(line)
-        file.write(line+'\n')
-    file.close()
+    # Point SEG_PATH to a folder containing your training wavs 
+    # Doesn't matter if it's LJspeech, CMU Arctic etc. it should work fine
+    SEG_PATH = CONFIG.data_path
+    OUT_PATH = os.path.join(CONFIG.output_path, CONFIG.run_name, 'data')
+    QUANT_PATH = os.path.join(OUT_PATH, 'quant/')
+    MEL_PATH = os.path.join(OUT_PATH, 'mel/')
+    os.makedirs(OUT_PATH, exist_ok=True)
+    os.makedirs(QUANT_PATH, exist_ok=True)
+    os.makedirs(MEL_PATH, exist_ok=True)
+
+    wav_files = get_files(SEG_PATH)
+    print(" > Number of audio files : {}".format(len(wav_files)))
+
+    wav_file = wav_files[1]
+    m, x, wav = convert_file(wav_file)
+
+    # save an example for sanity check
+    x = 2 * x / (2**bits - 1) - 1
+    librosa.output.write_wav(OUT_PATH + 'test_quant.wav', x, sr=CONFIG.sample_rate)
+
+    # This will take a while depending on size of dataset
+    with Pool(8) as p:
+        dataset_ids = list(tqdm(p.imap(process_wav, wav_files), total=len(wav_files)))
+
+    # save metadata
+    with open(os.path.join(OUT_PATH, 'dataset_ids.pkl'), 'wb') as f:
+        pickle.dump(dataset_ids, f)
